@@ -57,6 +57,15 @@ def test_import_export_json(tmp_path):
     content,_,_=export_result(s,eid,'population');p=tmp_path/'population.json';p.write_bytes(content)
     imported=import_archive(s,p,'round trip')['experiment_id']
     assert [g.fingerprint for g in s.population(eid,3)]==[g.fingerprint for g in s.population(imported,3)]
+    assert histories(s,eid)[-10:]==histories(s,imported)
+
+def test_control_race_and_invalid_worker_state(tmp_path):
+    s=Store(tmp_path);eid=s.create(small(),'queued');s.command(eid,'pause')
+    assert run_experiment(tmp_path,eid,scheduled=True)['status']=='paused'
+    assert s.checkpoint(eid) is None
+    run_experiment(tmp_path,eid)
+    with pytest.raises(ValueError,match='cannot execute'):run_experiment(tmp_path,eid)
+    assert s.experiment(eid)['status']=='completed'
 
 def test_e8_readonly_references(tmp_path):
     source=ROOT/'experiment_08/results/networks.sqlite';s=Store(tmp_path)

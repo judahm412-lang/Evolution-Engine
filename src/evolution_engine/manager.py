@@ -4,9 +4,11 @@ import os
 import subprocess
 import sys
 import time
+import json
+import uuid
 import numpy as np
 from .config import Config
-from .storage import Store
+from .storage import Store,encode
 from .runner import exclusive
 
 def worker_active(root,eid):
@@ -26,7 +28,8 @@ def enqueue(store,config,sweep=None):
             if len(values)>1 or len(seeds)>1:
                 raw['experiment_id']=None;raw['name']=f'{config.name} · w={value:g} · replicate {i+1}'
             planned.append(Config.model_validate(raw))
-    for c in planned:ids.append(store.create(c,'queued'))
+    batch=uuid.uuid4().hex
+    for index,c in enumerate(planned):ids.append(store.create(c,'queued',encode({'batch':batch,'worker_limit':config.execution.workers,'root_seed':config.seed,'replicate_index':index%config.replicates,'seed_derivation':'NumPy SeedSequence.spawn; PCG64 substreams'})))
     return ids
 
 def handle_failure(store,eid,reason):
@@ -57,14 +60,26 @@ def scheduler(root,until_idle=False):
                 elif r['id'] not in children:handle_failure(store,r['id'],'worker disappeared before a safe boundary')
             settings=store.settings();count=len(set(active)|set(children))
             slots=max(0,settings['max_workers']-count)
-            queued=store.query("SELECT id FROM experiments WHERE status='queued' ORDER BY priority DESC,created LIMIT ?",(slots,))
+            groups={}
+            for eid in set(active)|set(children):
+                origin=store.experiment(eid)['origin']
+                if origin and origin.startswith('{'):
+                    group=json.loads(origin).get('batch');groups[group]=groups.get(group,0)+1
+            queued=store.query("SELECT id,origin FROM experiments WHERE status='queued' ORDER BY priority DESC,created")
             for row in queued:
+                if slots<=0:break
                 eid=row['id']
                 if eid in children or worker_active(store.root,eid):continue
+                group=None
+                if row['origin'] and row['origin'].startswith('{'):
+                    origin=json.loads(row['origin']);group=origin.get('batch')
+                    if groups.get(group,0)>=origin['worker_limit']:continue
                 env=os.environ.copy()
                 for key in ('OMP_NUM_THREADS','OPENBLAS_NUM_THREADS','MKL_NUM_THREADS','NUMBA_NUM_THREADS'):env[key]='1'
                 with (store.root/f'{eid}.log').open('ab') as log:
                     children[eid]=subprocess.Popen([sys.executable,'-m','evolution_engine','--data',str(store.root),'worker',eid],stdout=log,stderr=log,env=env)
+                slots-=1
+                if group:groups[group]=groups.get(group,0)+1
             if until_idle and not children and not active and not store.query("SELECT 1 FROM experiments WHERE status='queued' LIMIT 1"):return
             time.sleep(min(settings['poll_seconds'],1))
 

@@ -1,6 +1,7 @@
 """Read-only archive adapters with explicit experiment namespaces and provenance."""
 from pathlib import Path
 import hashlib
+import gzip
 import json
 import re
 import sqlite3
@@ -19,15 +20,23 @@ def import_experiment8(store,path,world,generations):
         if not selected or not set(selected)<=set(available):raise ValueError('world or generations missing from Experiment 8 database')
         eid=store.create(Config(name=f'Experiment 8 · {world}',generations=max(selected)+1),'imported',str(path))
         with store.transaction() as target:
-            loaded=set()
+            loaded=set();issues=[]
             def load(nid):
-                if nid in loaded:return
-                row=db.execute('SELECT birth_generation,mutation_count,parent_id,genes,first_generation FROM networks WHERE world=? AND id=?',(world,nid)).fetchone()
-                if row is None:raise ValueError(f'missing ancestor {nid}')
-                born,count,parent,blob,first=row
-                g=Genome(nid,(9,12,3),('sigmoid','linear'),np.frombuffer(blob,dtype='<f8'),parent or None,born,first,attempted_mutations=count or 0)
-                store.put_genome(target,eid,g,{'path':str(path),'world':world});loaded.add(nid)
-                if parent:load(parent)
+                chain=[];seen=set();current=nid
+                while current and current not in loaded:
+                    if current in seen:raise ValueError('cyclic ancestry in source database')
+                    seen.add(current)
+                    row=db.execute('SELECT birth_generation,mutation_count,parent_id,genes,first_generation FROM networks WHERE world=? AND id=?',(world,current)).fetchone()
+                    if row is None:raise ValueError(f'missing ancestor {current}')
+                    chain.append((current,row));current=row[2]
+                for current,row in reversed(chain):
+                    born,count,parent,blob,first=row;parameters=np.frombuffer(blob,dtype='<f8');changes=()
+                    if parent:
+                        pg=np.frombuffer(db.execute('SELECT genes FROM networks WHERE world=? AND id=?',(world,parent)).fetchone()[0],dtype='<f8')
+                        changes=tuple((int(i),float(pg[i]),float(parameters[i])) for i in np.flatnonzero(pg!=parameters))
+                        if count is not None and len(changes)!=count:issues.append(f'{current}: mutation count {count}, observed {len(changes)}')
+                    g=Genome(current,(9,12,3),('sigmoid','linear'),parameters,parent or None,born,first,changes,count or 0)
+                    store.put_genome(target,eid,g,{'path':str(path),'world':world});loaded.add(current)
             for gen in selected:
                 rows=db.execute('SELECT slot,id,fitness FROM appearances WHERE world=? AND generation=? ORDER BY slot',(world,gen)).fetchall()
                 for slot,nid,fit in rows:
@@ -38,7 +47,13 @@ def import_experiment8(store,path,world,generations):
                 target.execute('INSERT INTO generations VALUES(?,?,?)',(eid,gen,encode({'mean':float(np.mean(fits)),'maximum':max(fits),'minimum':min(fits),'champion_id':champ,'historical':True})))
             target.execute('UPDATE experiments SET generation=? WHERE id=?',(max(selected)+1,eid))
             store.event(target,eid,'import',f'{len(selected)} snapshots, {len(loaded)} external genome references; source opened read-only; missing generation indices: {sorted(set(range(min(selected),max(selected)+1))-set(selected))[:100]}')
+            if issues:store.event(target,eid,'import_warnings',encode(issues))
         return eid
+    except BaseException as exc:
+        if 'eid' in locals():
+            with store.transaction() as target:
+                target.execute("UPDATE experiments SET status='failed',error=? WHERE id=?",(str(exc),eid))
+        raise
     finally:db.close()
 
 def import_archive(store,path,name,population_size=100,prefix=None,start_generation=0):
@@ -52,8 +67,13 @@ def import_archive(store,path,name,population_size=100,prefix=None,start_generat
             stems={re.sub(r'\(\d+\)$','',Path(n).stem) for n in names}
             if len(stems)>1:raise ValueError('archive contains multiple experiments; select one --prefix')
             names.sort(key=lambda n:int(re.search(r'\((\d+)\)',n).group(1)) if re.search(r'\((\d+)\)',n) else 0)
-            raw=[(n,json.loads(z.read(n))) for n in names]
-    else:raw=[(path.name,json.loads(path.read_text()))]
+        def chunks():
+            with zipfile.ZipFile(path) as archive:
+                for member in names:yield member,json.loads(archive.read(member))
+        raw=chunks()
+    else:
+        content=gzip.decompress(path.read_bytes()).decode() if path.suffix=='.gz' else path.read_text()
+        raw=[(path.name,json.loads(content))]
     eid=store.create(Config(name=name),'imported',str(path));known={};issues=[];generation=start_generation
     try:
         with store.transaction() as db:
@@ -90,14 +110,24 @@ def import_archive(store,path,name,population_size=100,prefix=None,start_generat
                                 elif parent:issues.append(f'{nid}: missing parent {parent}')
                                 g=Genome(nid,(9,12,3),('sigmoid','linear'),p,parent or None,born,generation,changes,count)
                         if g.id in seen:raise ValueError('duplicate identity in population')
+                        fitness_record=None
+                        if isinstance(content,dict):
+                            fitness_record=next((f for f in content.get('fitness',[]) if f['network_id']==g.id),None)
+                            if fitness_record is not None:fit=float(fitness_record['total'])
                         if not np.isfinite(fit):raise ValueError('nonfinite fitness')
                         seen.add(g.id);known[g.id]=g;store.put_genome(db,eid,g)
                         db.execute('INSERT INTO populations VALUES(?,?,?,?)',(eid,generation,slot,g.id))
-                        db.execute('INSERT INTO fitness VALUES(?,?,?,?,NULL,NULL,NULL,NULL,NULL,NULL,?)',(eid,generation,g.id,fit,'{}'));fitness.append((g.id,fit))
+                        f=fitness_record or {}
+                        db.execute('INSERT INTO fitness VALUES(?,?,?,?,?,?,?,?,?,?,?)',(eid,generation,g.id,fit,f.get('self_play'),f.get('bot'),f.get('matches'),f.get('wins'),f.get('losses'),f.get('draws'),f.get('components','{}')));fitness.append((g.id,fit))
                     db.execute('INSERT INTO generations VALUES(?,?,?)',(eid,generation,encode({'mean':float(np.mean([f for _,f in fitness])),'maximum':max(f for _,f in fitness),'champion_id':max(fitness,key=lambda t:t[1])[0],'historical':True})))
                     generation+=1
             db.execute('UPDATE experiments SET generation=? WHERE id=?',(generation,eid))
-            digest=hashlib.file_digest(path.open('rb'),'sha256').hexdigest()
+            for nid in known:
+                seen=set();cur=nid
+                while cur in known and known[cur].parent_id:
+                    if cur in seen:raise ValueError('cyclic ancestry in archive')
+                    seen.add(cur);cur=known[cur].parent_id
+            with path.open('rb') as source:digest=hashlib.file_digest(source,'sha256').hexdigest()
             store.event(db,eid,'import',encode({'source_sha256':digest,'issues':issues,'genomes':len(known)}))
         return {'experiment_id':eid,'issues':issues,'genomes':len(known)}
     except BaseException as exc:

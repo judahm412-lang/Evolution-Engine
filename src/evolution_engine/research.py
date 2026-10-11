@@ -1,5 +1,6 @@
 """Independent saved-genome analyses; these never feed rewards into evolution."""
 import csv
+import gzip
 import io
 import json
 import time
@@ -57,13 +58,35 @@ def population_analysis(store,eid,generation):
     pop=store.population(eid,generation)
     if not pop:raise ValueError('snapshot not retained or generation not evaluated')
     genes=np.stack([g.parameters for g in pop]);labels=cluster_labels(genes)
+    parents={r['child_id']:r['parent_id'] for r in store.query('SELECT child_id,parent_id FROM parents WHERE experiment_id=?',(eid,))}
+    known={r['id'] for r in store.query('SELECT id FROM genomes WHERE experiment_id=?',(eid,))};resolved={}
     families={}
     for g in pop:
-        chain=lineage(store,eid,g.id,200)['nodes'];founder=chain[-1]['id'] if not chain[-1].get('parent_id') else None
+        chain=[];seen=set();cur=g.id
+        while cur in parents and cur not in resolved:
+            if cur in seen:raise ValueError('cyclic ancestry')
+            seen.add(cur);chain.append(cur);cur=parents[cur]
+        founder=resolved.get(cur,cur if cur in known else None)
+        for child in chain:resolved[child]=founder
         families[str(g.id)]=founder
     return {'ids':[g.id for g in pop],'clusters':labels.tolist(),'founders':families,
             'cluster_note':'Descriptive genetic partitions, not confirmed biological species',
             'genetic_distances':[[float(np.sqrt(np.mean((a-b)**2))) for b in genes] for a in genes]}
+
+def run_metrics(store,eid):
+    exp=store.experiment(eid);events=store.query('SELECT time,kind FROM events WHERE experiment_id=? ORDER BY id',(eid,))
+    seconds=0;start=None
+    for event in events:
+        if event['kind']=='running':start=event['time']
+        elif event['kind'] in ('paused','completed','cancelled','failed','recovery') and start is not None:
+            seconds+=event['time']-start;start=None
+    if start is not None and exp['status'] in ('running','pausing','cancelling'):seconds+=time.time()-start
+    checkpoint=store.query('SELECT generation,created FROM checkpoints WHERE experiment_id=? ORDER BY generation DESC LIMIT 1',(eid,))
+    return {'elapsed_active_seconds':seconds,'generations_per_second':exp['generation']/seconds if seconds else None,
+            'eta_seconds':seconds/exp['generation']*(exp['config']['generations']-exp['generation']) if exp['generation'] else None,
+            'unique_genomes':store.query('SELECT COUNT(DISTINCT fingerprint) AS n FROM genomes WHERE experiment_id=?',(eid,))[0]['n'],
+            'identities':store.query('SELECT COUNT(*) AS n FROM genomes WHERE experiment_id=?',(eid,))[0]['n'],
+            'checkpoint':checkpoint[0] if checkpoint else None}
 
 def export_result(store,eid,kind='summary',generation=None):
     exp=store.experiment(eid)
@@ -80,7 +103,8 @@ def export_result(store,eid,kind='summary',generation=None):
         if not pop:raise ValueError('snapshot not retained')
         if kind=='champion':
             stats=store.stats(eid,generation,1);pop=[store.genome(eid,stats[0]['champion_id'])]
-        value={'experiment_id':eid,'generation':generation,'networks':[g.record() for g in pop]}
+        value={'experiment_id':eid,'generation':generation,'networks':[g.record() for g in pop],
+               'fitness':store.query('SELECT network_id,total,self_play,bot,matches,wins,losses,draws,components FROM fitness WHERE experiment_id=? AND generation=?',(eid,generation))}
     elif kind=='analysis':
         value=population_analysis(store,eid,exp['generation']-1 if generation is None else generation)
     else:raise ValueError('unknown export kind')
@@ -90,3 +114,6 @@ def save_tournament(store,result):
     with store.transaction() as db:
         cursor=db.execute('INSERT INTO analyses(created,kind,result) VALUES(?,?,?)',(time.time(),'tournament',encode(result)))
         return cursor.lastrowid
+
+def compress_export(data,mime,name):
+    return gzip.compress(data,mtime=0),'application/gzip',name+'.gz'

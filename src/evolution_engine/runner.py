@@ -1,7 +1,9 @@
 """CLI/programmatic runner; generation boundaries are transaction boundaries."""
 from contextlib import contextmanager
 import fcntl
+import logging
 import os
+import resource
 import time
 import traceback
 from . import __version__
@@ -24,18 +26,22 @@ def state_record(eid,generation,population,next_id,rngs,config,env):
             'generation':generation,'population':[g.id for g in population],'next_id':next_id,
             'rng':states(rngs),'config':config.model_dump(),'environment_state':{},'pending':'evaluate_population'}
 
-def run_experiment(root,eid,stop_after=None,fault=None):
+def run_experiment(root,eid,stop_after=None,fault=None,scheduled=False):
     store=Store(root)
+    logger=logging.getLogger('evolution_engine')
+    logger.setLevel(store.settings()['logging'])
     # Resolve from DB before constructing any filesystem name.
     exp=store.experiment(eid);config=Config.model_validate(exp['config'])
     with exclusive(store.root/f'{eid}.lock'):
+        with store.transaction() as db:
+            current=db.execute('SELECT status FROM experiments WHERE id=?',(eid,)).fetchone()[0]
+            if scheduled and current!='queued':return store.experiment(eid)
+            if current not in ('created','queued','running','paused','failed'):raise ValueError(f'cannot execute {current}')
+            db.execute("UPDATE experiments SET status='running',pid=?,error=NULL,updated=? WHERE id=?",(os.getpid(),time.time(),eid))
+            store.event(db,eid,'running',f'worker pid {os.getpid()}')
         try:
-            with store.transaction() as db:
-                current=db.execute('SELECT status FROM experiments WHERE id=?',(eid,)).fetchone()[0]
-                if current not in ('created','queued','running','paused','failed'):raise ValueError(f'cannot execute {current}')
-                db.execute("UPDATE experiments SET status='running',pid=?,error=NULL,updated=? WHERE id=?",(os.getpid(),time.time(),eid))
-                store.event(db,eid,'running',f'worker pid {os.getpid()}')
             env=create_environment(config);saved=store.checkpoint(eid)
+            logger.info('Starting experiment %s with seed %s',eid,config.seed)
             if saved:
                 if saved['environment_version']!=env.version:raise ValueError('environment version mismatch')
                 prior=Config.model_validate(saved['config']).model_dump();now=config.model_dump()
@@ -60,13 +66,16 @@ def run_experiment(root,eid,stop_after=None,fault=None):
                 state=state_record(eid,generation+1,next_population,next_id,rngs,config,env)
                 stats.update({'evaluation_seconds':evaluated-start,'analysis_seconds':analyzed-evaluated,
                               'reproduction_seconds':reproduced-analyzed,'compute_seconds':reproduced-start,
-                              'cpu_seconds':time.process_time()-cpu})
+                              'cpu_seconds':time.process_time()-cpu,
+                              'peak_rss_mib':resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024})
                 store.commit_generation(eid,generation,population,evaluation,stats,next_population,state,config,fault)
                 population=next_population;generation+=1;iterations+=1
+                logger.debug('%s committed generation %s',eid,generation)
             else:status='completed'
             with store.transaction() as db:
                 db.execute('UPDATE experiments SET status=?,pid=NULL,updated=? WHERE id=?',(status,time.time(),eid))
                 store.event(db,eid,status,f'{generation} generations committed')
+            logger.info('%s %s at generation %s',eid,status,generation)
             return store.experiment(eid)
         except BaseException as exc:
             with store.transaction() as db:

@@ -1,6 +1,7 @@
 """Stable module and console entry points; paths are independent of launch CWD."""
 import argparse
 import json
+import logging
 import os
 from pathlib import Path
 from .config import Config,load_config
@@ -17,7 +18,7 @@ def main():
     p=sub.add_parser('worker');p.add_argument('id')
     p=sub.add_parser('manager');p.add_argument('--until-idle',action='store_true');p.add_argument('--workers',type=int,choices=range(1,17))
     p=sub.add_parser('serve');p.add_argument('--host',default='127.0.0.1',choices=['127.0.0.1','localhost','::1']);p.add_argument('--port',default=8765,type=int)
-    p=sub.add_parser('export');p.add_argument('id');p.add_argument('--kind',default='summary',choices=['summary','statistics','config','population','champion','analysis']);p.add_argument('--generation',type=int);p.add_argument('--output',required=True)
+    p=sub.add_parser('export');p.add_argument('id');p.add_argument('--kind',default='summary',choices=['summary','statistics','config','population','champion','analysis']);p.add_argument('--generation',type=int);p.add_argument('--output',required=True);p.add_argument('--compress',action='store_true')
     p=sub.add_parser('inspect');p.add_argument('id');p.add_argument('network',type=int)
     p=sub.add_parser('tournament');p.add_argument('id');p.add_argument('--generation',type=int);p.add_argument('--rounds',default=23,type=int);p.add_argument('--full-starts',action='store_true')
     p=sub.add_parser('import-e8');p.add_argument('path');p.add_argument('--world',required=True);p.add_argument('--generations',nargs='+',type=int)
@@ -25,6 +26,7 @@ def main():
     p=sub.add_parser('benchmark');p.add_argument('--generations',type=int,default=40);p.add_argument('--workers',type=int,nargs='+',default=[1,2,4]);p.add_argument('--output')
     p=sub.add_parser('check');p.add_argument('id',nargs='?')
     args=parser.parse_args();store=Store(args.data);result=None
+    logging.basicConfig(level=store.settings()['logging'],format='%(asctime)s %(levelname)s %(message)s')
     if args.command=='run':
         from .manager import enqueue,ensure_scheduler
         from .runner import run_experiment
@@ -41,7 +43,7 @@ def main():
             ensure_scheduler(store.root)
     elif args.command=='worker':
         from .runner import run_experiment
-        result=run_experiment(store.root,args.id)
+        result=run_experiment(store.root,args.id,scheduled=True)
     elif args.command=='manager':
         from .manager import scheduler
         if args.workers:store.save_settings({'max_workers':args.workers})
@@ -51,10 +53,14 @@ def main():
         from .api import create_app
         from .manager import ensure_scheduler
         ensure_scheduler(store.root)
-        uvicorn.run(create_app(store.root),host=args.host,port=args.port,log_level='info')
+        uvicorn.run(create_app(store.root),host=args.host,port=args.port,log_level=store.settings()['logging'].lower())
     elif args.command=='export':
         from .research import export_result
-        content,_,_=export_result(store,args.id,args.kind,args.generation);Path(args.output).write_bytes(content)
+        content,mime,name=export_result(store,args.id,args.kind,args.generation)
+        if args.compress or (store.experiment(args.id)['config']['storage']['export_compression'] and args.output.endswith('.gz')):
+            from .research import compress_export
+            content,_,_=compress_export(content,mime,name)
+        Path(args.output).write_bytes(content)
         result={'output':str(Path(args.output).resolve())}
     elif args.command=='inspect':
         from .research import inspect
