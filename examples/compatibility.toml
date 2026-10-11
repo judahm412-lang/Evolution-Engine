@@ -1,0 +1,13 @@
+name = "Engine v1 compatibility"
+mode = "compatibility"
+seed = 42
+generations = 1000
+
+[environment]
+bot_weight = 0.25
+
+[execution]
+workers = 2
+checkpoint_frequency = 10
+checkpoint_retention = 10
+acceleration = "auto"
