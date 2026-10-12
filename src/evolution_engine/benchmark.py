@@ -55,7 +55,7 @@ def benchmark(store,generations=40,workers=(1,2,4)):
     single={'experiment_id':eid,'generations':generations,'elapsed_seconds':elapsed,'seconds_per_generation':elapsed/generations,
             'generations_per_second':generations/elapsed,'evaluation_seconds':sum(r['evaluation_seconds'] for r in stats),
             'database_transaction_seconds':sum(writes),'checkpoint_prepare_seconds':sum(checkpoints),
-            'checkpoint_note':'Serialization/checksum/INSERT, included in DB transaction time; no double counting.',
+            'checkpoint_note':'Serialization/checksum/INSERT including initial checkpoint; overlaps DB transaction timing; do not add.',
             'cpu_seconds':cpu,'cpu_percent_one_core':100*cpu/elapsed,'peak_rss_mib':resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024}
     parallel=[]
     for workers_count in workers:
@@ -74,7 +74,7 @@ def benchmark(store,generations=40,workers=(1,2,4)):
     cpu_model=next((l.split(':',1)[1].strip() for l in Path('/proc/cpuinfo').read_text().splitlines() if l.startswith('model name')),platform.processor())
     result={'time':time.time(),'hardware':{'cpu':cpu_model,'logical_cpus':os.cpu_count(),'platform':platform.platform(),'python':sys.version,'numpy':np.__version__,
                                         'memory_total':next(l for l in Path('/proc/meminfo').read_text().splitlines() if l.startswith('MemTotal'))},
-            'configuration':config.model_dump(),'components':components,'single_process':single,'parallel':parallel,
+            'configuration':config.model_dump(),'measurement_seeds':{'components':91,'single_process':91,'parallel_experiments':[700,701,702,703]},'components':components,'single_process':single,'parallel':parallel,
             'turbowarp_baseline':{'seconds_per_generation':.416,'source':'User-provided optimized 200-generation baseline; not independently rerun',
                                  'scope':'Tournament computation only; excludes some reproduction/archive overhead'},
             'comparison_caveat':'Python evaluation includes policy construction and schedule generation; the source baseline timing boundary is not fully controlled. No end-to-end TurboWarp speedup claim.'}

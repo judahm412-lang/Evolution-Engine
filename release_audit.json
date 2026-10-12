@@ -1,0 +1,49 @@
+{
+  "historical_original_files": 110,
+  "historical_changed_or_missing": [],
+  "historical_extra_files": [],
+  "browser_experiment": "ed17e6addec9",
+  "browser_matches_uninterrupted": true,
+  "genomes_sha256": "4e4aff73ca4bb4835c553b0b1360ceab05c17f1ac76792fcfbf61c6abc6cac49",
+  "fitness_sha256": "eb303000e473f04376d03b8ceb463cc2ce6fb161b84476a9f21885c22783dfac",
+  "database_integrity": {
+    "integrity": [
+      {
+        "integrity_check": "ok"
+      }
+    ],
+    "foreign_keys": [],
+    "schema": 2
+  },
+  "audit_date": "2026-10-12",
+  "automated_tests": {
+    "v2_full": 49,
+    "v2_final_export_regression": 5,
+    "experiment8_original": 5
+  },
+  "browser_tournament": {
+    "analysis_id": 1,
+    "matches": 672,
+    "download_bytes": 4594,
+    "export_sha256": "3267c13572473206d494c81cc02ff5212164d560d44fcb4bcb76874e4c291afa"
+  },
+  "responsive_viewport": {
+    "width": 390,
+    "height": 844,
+    "page_scroll_width": 375
+  },
+  "browser_console_errors": [],
+  "required_documents": [
+    "README.md",
+    "ARCHITECTURE.md",
+    "ROADMAP.md",
+    "DEVELOPMENT_PROGRESS.md",
+    "COMPATIBILITY.md",
+    "BENCHMARKS.md",
+    "DATABASE_SCHEMA.md",
+    "EXPERIMENT_GUIDE.md",
+    "DASHBOARD_GUIDE.md",
+    "CHANGELOG.md",
+    "ENGINE_V2_RELEASE_REPORT.md"
+  ]
+}

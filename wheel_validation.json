@@ -1,0 +1,20 @@
+{
+  "wheel_import": "/tmp/enginev2-wheel-check/lib/python3.13/site-packages/evolution_engine/__init__.py",
+  "numba_installed": false,
+  "target_generations": 40,
+  "compatibility_generations": 3,
+  "static_assets_bundled": true,
+  "openapi_routes": 23,
+  "integrity": {
+    "integrity": [
+      {
+        "integrity_check": "ok"
+      }
+    ],
+    "foreign_keys": [],
+    "schema": 2
+  },
+  "wheel_sha256": "2a055bf163e24f26d3499a2a7e1e8b953695480d80e1f8d3f4d08b351499a951",
+  "wheel_bytes": 54134,
+  "package_files_verified": 20
+}

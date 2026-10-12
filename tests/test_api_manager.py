@@ -84,3 +84,16 @@ def test_replicates_and_priority(tmp_path):
         assert len(set(seeds))==3
     s.command(ids[0],'pause');s.command(ids[1],'cancel')
     assert s.experiment(ids[0])['status']=='paused' and s.experiment(ids[1])['status']=='cancelled'
+
+def test_batch_worker_cap(tmp_path):
+    s=Store(tmp_path)
+    ids=enqueue(s,small(generations=8,replicates=3,execution={'workers':1}))
+    p=manager(tmp_path,3);out,err=p.communicate(timeout=30)
+    assert p.returncode==0,err.decode()
+    intervals=[]
+    for eid in ids:
+        assert s.experiment(eid)['status']=='completed'
+        events=s.query("SELECT time,kind FROM events WHERE experiment_id=? AND kind IN ('running','completed') ORDER BY id",(eid,))
+        intervals.append((events[0]['time'],events[-1]['time']))
+    intervals.sort()
+    assert all(a[1]<=b[0] for a,b in zip(intervals,intervals[1:]))

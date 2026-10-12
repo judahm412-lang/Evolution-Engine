@@ -29,6 +29,8 @@ class TournamentRequest(Model):
     rounds: int=Field(23,ge=1,le=1000)
     repeats: int=Field(1,ge=1,le=100)
     full_starts: bool=False
+    opponents: list[Literal['cycle','reverse','rrp','uniform','copycat','anti_copycat','frequency','transition','noisy_cycle','reactive']]=Field(default_factory=lambda:['cycle','reverse','rrp'],max_length=10)
+    seed: int=Field(8,ge=0,le=2**53-1)
 
 class InspectorRequest(Model):
     observations: list[float]=Field(min_length=1,max_length=1024)
@@ -45,7 +47,7 @@ class Sweep(Model):
     bot_weights: list[float]=Field(min_length=1,max_length=20)
 
 def create_app(root):
-    store=Store(root);app=FastAPI(title='Evolution Engine',version=__version__)
+    store=Store(root);app=FastAPI(title='Evolution Engine',version=__version__,docs_url=None,redoc_url=None)
     web=Path(__file__).parent/'web';app.state.store=store
 
     @app.middleware('http')
@@ -100,7 +102,8 @@ def create_app(root):
         if min_fitness is not None:
             clause+=' AND id IN (SELECT experiment_id FROM fitness GROUP BY experiment_id HAVING MAX(total)>=?)';args.append(min_fitness)
         rows=store.query('SELECT * FROM experiments'+clause+' ORDER BY created DESC LIMIT ? OFFSET ?',(*args,limit,offset))
-        for r in rows:r['config']=json.loads(r['config'])
+        for r in rows:
+            r['config']=json.loads(r['config']);r['seed_text']=str(r['config']['seed'])
         return {'items':rows,'total':store.query('SELECT COUNT(*) AS n FROM experiments'+clause,args)[0]['n']}
 
     @app.post('/api/experiments')
@@ -116,7 +119,9 @@ def create_app(root):
     def templates():return {'compatibility':Config().model_dump(),'four_worlds':{'config':Config().model_dump(),'bot_weights':[0,.1,.25,1]}}
 
     @app.get('/api/experiments/{eid}')
-    def experiment(eid:str):return {**store.experiment(eid),'metrics':run_metrics(store,eid)}
+    def experiment(eid:str):
+        e=store.experiment(eid)
+        return {**e,'seed_text':str(e['config']['seed']),'metrics':run_metrics(store,eid)}
 
     @app.post('/api/experiments/{eid}/control')
     def control(eid:str,action:Action):return store.command(eid,action.action,action.generations)
@@ -166,7 +171,7 @@ def create_app(root):
     def championship(body:TournamentRequest):
         refs=[(e.experiment_id,e.network_id) for e in body.entrants]
         if len(set(refs))!=len(refs):raise ValueError('duplicate tournament entrants')
-        result=tournament([store.genome(*ref) for ref in refs],body.rounds,body.repeats,body.full_starts)
+        result=tournament([store.genome(*ref) for ref in refs],body.rounds,body.repeats,body.full_starts,body.opponents,body.seed)
         result['entrants']=[e.model_dump() for e in body.entrants];result['analysis_id']=save_tournament(store,result);return result
 
     @app.get('/api/tournaments')
@@ -176,7 +181,12 @@ def create_app(root):
     def saved_tournament(tid:int):
         rows=store.query('SELECT result FROM analyses WHERE id=?',(tid,))
         if not rows:raise KeyError(tid)
-        return json.loads(rows[0]['result'])
+        return {**json.loads(rows[0]['result']),'analysis_id':tid}
+
+    @app.get('/api/tournaments/{tid}/export')
+    def export_tournament(tid:int):
+        data=json.dumps(saved_tournament(tid),indent=2,allow_nan=False)
+        return Response(data,media_type='application/json',headers={'Content-Disposition':f'attachment; filename="tournament-{tid}.json"'})
 
     @app.get('/api/benchmarks')
     def benchmarks():return [{'id':r['id'],'created':r['created'],'result':json.loads(r['result'])} for r in store.query('SELECT * FROM benchmarks ORDER BY id DESC LIMIT 20')]

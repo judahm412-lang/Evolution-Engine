@@ -14,6 +14,14 @@ from .neural import Genome
 SCHEMA_VERSION=2
 def encode(value): return json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False)
 
+def historical_connection(path):
+    """Frozen inputs must not create sidecars or omit uncheckpointed writes."""
+    path=Path(path).resolve(strict=True)
+    wal=Path(str(path)+'-wal')
+    if wal.exists() and wal.stat().st_size:
+        raise ValueError('historical source has pending WAL data; close and checkpoint it before import')
+    return sqlite3.connect(path.as_uri()+'?mode=ro&immutable=1',uri=True)
+
 class Store:
     def __init__(self,root):
         self.root=Path(root).expanduser().resolve();self.root.mkdir(parents=True,exist_ok=True)
@@ -136,7 +144,7 @@ class Store:
         row=rows[0];blob=row['genes']
         if blob is None:
             ext=json.loads(row['external']);path=Path(ext['path'])
-            db=sqlite3.connect(path.as_uri()+'?mode=ro',uri=True)
+            db=historical_connection(path)
             try:
                 source=db.execute('SELECT genes FROM networks WHERE world=? AND id=?',(ext['world'],nid)).fetchone()
                 if source is None:raise ValueError('referenced historical genome is missing')

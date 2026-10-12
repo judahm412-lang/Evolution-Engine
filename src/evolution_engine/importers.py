@@ -9,11 +9,11 @@ import zipfile
 import numpy as np
 from .config import Config
 from .neural import Genome
-from .storage import encode
+from .storage import encode,historical_connection
 
 def import_experiment8(store,path,world,generations):
     path=Path(path).resolve(strict=True)
-    db=sqlite3.connect(path.as_uri()+'?mode=ro',uri=True)
+    db=historical_connection(path)
     try:
         available=[r[0] for r in db.execute('SELECT DISTINCT generation FROM appearances WHERE world=? ORDER BY generation',(world,))]
         selected=available if generations is None else sorted(set(generations))

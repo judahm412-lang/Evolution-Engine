@@ -11,7 +11,7 @@ from .evolution import cluster_labels
 from .rps_core import batch_matches,HISTORIES,FULL,original_bot_score
 from .storage import encode
 
-def tournament(genomes,rounds=23,repeats=1,full_starts=False):
+def tournament(genomes,rounds=23,repeats=1,full_starts=False,opponents=('cycle','reverse','rrp'),seed=8):
     if not 1<=len(genomes)<=200 or not 1<=rounds<=10000 or not 1<=repeats<=100:raise ValueError('invalid tournament bounds')
     if any(g.layers[0]!=9 or g.layers[-1]!=3 for g in genomes):raise ValueError('RPS tournaments require 9 inputs and 3 outputs')
     compatibility=all(g.layers==(9,12,3) and g.activations==('sigmoid','linear') for g in genomes)
@@ -21,10 +21,20 @@ def tournament(genomes,rounds=23,repeats=1,full_starts=False):
     matrix=sum(batch_matches(p,p,rounds,h)[0] for h in starts)*repeats
     # Diagonal self-matches are excluded from reported competitive match counts.
     totals=matrix.sum(axis=1);order=np.argsort(-totals,kind='stable')
+    from .generalization import OPPONENTS,play
+    original=('cycle','reverse','rrp')
+    if any(k not in (*original,*OPPONENTS) for k in opponents):raise ValueError('unknown opponent')
+    trials=[]
+    for index,g in enumerate(genomes):
+        for kind in opponents:
+            if kind in original:continue
+            scores=[play(p[index],kind,seed+rep,(0,0,0),rounds)[0] for rep in range(repeats)]
+            trials.append({'index':index,'id':g.id,'opponent':kind,'seeds':[seed+rep for rep in range(repeats)],'net_scores':scores,'mean_net_per_throw':float(np.mean(scores)/rounds)})
     return {'ids':[g.id for g in genomes],'net_matrix':matrix.tolist(),
             'ranking':[{'index':int(i),'id':genomes[int(i)].id,'net':int(totals[i])} for i in order],
             'rounds':rounds,'repeats':repeats,'starts':starts,'matches':len(genomes)*(len(genomes)-1)*len(starts)*repeats,
-            'original_bots':[{'id':g.id,'scores':[[original_bot_score(policy,k,o) for o in range(3)] for k in (1,2,3)]} for g,policy in zip(genomes,p)],
+            'original_bots':[{'id':g.id,'scores':{kind:[original_bot_score(policy,original.index(kind)+1,o) for o in range(3)] for kind in opponents if kind in original}} for g,policy in zip(genomes,p)],
+            'independent_trials':trials,'opponent_seed':seed,'opponents':list(opponents),
             'elapsed_seconds':time.perf_counter()-begin}
 
 def inspect(store,eid,nid,observations=None):

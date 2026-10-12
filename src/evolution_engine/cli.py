@@ -20,7 +20,7 @@ def main():
     p=sub.add_parser('serve');p.add_argument('--host',default='127.0.0.1',choices=['127.0.0.1','localhost','::1']);p.add_argument('--port',default=8765,type=int)
     p=sub.add_parser('export');p.add_argument('id');p.add_argument('--kind',default='summary',choices=['summary','statistics','config','population','champion','analysis']);p.add_argument('--generation',type=int);p.add_argument('--output',required=True);p.add_argument('--compress',action='store_true')
     p=sub.add_parser('inspect');p.add_argument('id');p.add_argument('network',type=int)
-    p=sub.add_parser('tournament');p.add_argument('id');p.add_argument('--generation',type=int);p.add_argument('--rounds',default=23,type=int);p.add_argument('--full-starts',action='store_true')
+    p=sub.add_parser('tournament');p.add_argument('id');p.add_argument('--generation',type=int);p.add_argument('--rounds',default=23,type=int);p.add_argument('--full-starts',action='store_true');p.add_argument('--opponents',nargs='+',default=['cycle','reverse','rrp']);p.add_argument('--seed',type=int,default=8)
     p=sub.add_parser('import-e8');p.add_argument('path');p.add_argument('--world',required=True);p.add_argument('--generations',nargs='+',type=int)
     p=sub.add_parser('import-archive');p.add_argument('path');p.add_argument('--name',required=True);p.add_argument('--population-size',type=int,default=100);p.add_argument('--prefix');p.add_argument('--start-generation',type=int,default=0)
     p=sub.add_parser('benchmark');p.add_argument('--generations',type=int,default=40);p.add_argument('--workers',type=int,nargs='+',default=[1,2,4]);p.add_argument('--output')
@@ -68,7 +68,7 @@ def main():
     elif args.command=='tournament':
         from .research import tournament,save_tournament
         gen=store.experiment(args.id)['generation']-1 if args.generation is None else args.generation
-        result=tournament(store.population(args.id,gen),args.rounds,full_starts=args.full_starts);save_tournament(store,result)
+        result=tournament(store.population(args.id,gen),args.rounds,full_starts=args.full_starts,opponents=args.opponents,seed=args.seed);save_tournament(store,result)
     elif args.command=='import-e8':
         from .importers import import_experiment8
         result=import_experiment8(store,args.path,args.world,args.generations)

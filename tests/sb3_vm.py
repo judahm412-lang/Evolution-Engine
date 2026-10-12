@@ -21,7 +21,7 @@ class VM:
             if block['opcode']=='procedures_definition':
                 proto=self.b[block['inputs']['custom_block'][1]];m=proto['mutation']
                 self.procedures[m['proccode']]=(json.loads(m['argumentnames']),json.loads(m['argumentids']),block['next'])
-        self.args={}
+        self.args={};self.activation_trace=[]
     def number(self,x):
         try:return float(x)
         except (ValueError,TypeError):return 0.
@@ -85,7 +85,9 @@ class VM:
             elif op=='data_addtolist':self.lists[f['LIST']].append(arg('ITEM'))
             elif op=='data_replaceitemoflist':self.lists[f['LIST']][int(self.number(arg('INDEX')))-1]=arg('ITEM')
             elif op=='data_deleteoflist':del self.lists[f['LIST']][int(self.number(arg('INDEX')))-1]
-            elif op=='lmsData_joinLists':self.lists[arg('LIST2')].extend(self.lists[arg('LIST1')])
+            elif op=='lmsData_joinLists':
+                self.lists[arg('LIST2')].extend(self.lists[arg('LIST1')])
+                if arg('LIST2')=='master input list':self.activation_trace.append(list(self.lists[arg('LIST2')]))
             elif op=='lmsData_setListArray':self.lists[arg('LIST')]=json.loads(arg('ARRAY'))
             elif op=='control_repeat':
                 for _ in range(round(self.number(arg('TIMES')))):sub()

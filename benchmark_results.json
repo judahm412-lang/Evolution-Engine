@@ -112,7 +112,7 @@
     "evaluation_seconds": 0.07099990600181627,
     "database_transaction_seconds": 0.30142693701418466,
     "checkpoint_prepare_seconds": 0.0017490669852122664,
-    "checkpoint_note": "Serialization/checksum/INSERT, included in DB transaction time; no double counting.",
+    "checkpoint_note": "Serialization/checksum/INSERT including initial checkpoint; overlaps DB transaction timing; do not add.",
     "cpu_seconds": 0.6350143319999999,
     "cpu_percent_one_core": 76.06456778727569,
     "peak_rss_mib": 146.63671875
@@ -166,5 +166,15 @@
     "source": "User-provided optimized 200-generation baseline; not independently rerun",
     "scope": "Tournament computation only; excludes some reproduction/archive overhead"
   },
-  "comparison_caveat": "Python evaluation includes policy construction and schedule generation; the source baseline timing boundary is not fully controlled. No end-to-end TurboWarp speedup claim."
+  "comparison_caveat": "Python evaluation includes policy construction and schedule generation; the source baseline timing boundary is not fully controlled. No end-to-end TurboWarp speedup claim.",
+  "measurement_seeds": {
+    "components": 91,
+    "single_process": 91,
+    "parallel_experiments": [
+      700,
+      701,
+      702,
+      703
+    ]
+  }
 }

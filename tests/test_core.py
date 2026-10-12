@@ -1,4 +1,6 @@
 import importlib.util
+import sys
+sys.dont_write_bytecode = True
 from pathlib import Path
 import numpy as np
 import pytest
