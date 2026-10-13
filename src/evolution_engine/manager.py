@@ -10,6 +10,8 @@ import numpy as np
 from .config import Config
 from .storage import Store,encode
 from .runner import exclusive
+from .coordination import gate, MaintenanceBusy
+from .resources import disk_guard
 
 def worker_active(root,eid):
     try:
@@ -35,6 +37,7 @@ def enqueue(store,config,sweep=None):
 def handle_failure(store,eid,reason):
     with store.transaction() as db:
         row=db.execute('SELECT * FROM experiments WHERE id=?',(eid,)).fetchone()
+        if row is None:return
         if row['status'] in ('pausing','cancelling'):
             new='paused' if row['status']=='pausing' else 'cancelled'
         elif row['attempts']<Config.model_validate_json(row['config']).execution.retries:
@@ -48,39 +51,47 @@ def scheduler(root,until_idle=False):
     with exclusive(store.root/'manager.lock'):
         children={}
         while True:
-            for eid,proc in list(children.items()):
-                code=proc.poll()
-                if code is not None:
-                    del children[eid]
-                    if code!=0:handle_failure(store,eid,f'worker exited with code {code}')
-            # Lock-based liveness also discovers children of a previous scheduler.
-            active=[]
-            for r in store.query("SELECT id,status FROM experiments WHERE status IN ('running','pausing','cancelling')"):
-                if worker_active(store.root,r['id']):active.append(r['id'])
-                elif r['id'] not in children:handle_failure(store,r['id'],'worker disappeared before a safe boundary')
-            settings=store.settings();count=len(set(active)|set(children))
-            slots=max(0,settings['max_workers']-count)
-            groups={}
-            for eid in set(active)|set(children):
-                origin=store.experiment(eid)['origin']
-                if origin and origin.startswith('{'):
-                    group=json.loads(origin).get('batch');groups[group]=groups.get(group,0)+1
-            queued=store.query("SELECT id,origin FROM experiments WHERE status='queued' ORDER BY priority DESC,created")
-            for row in queued:
-                if slots<=0:break
-                eid=row['id']
-                if eid in children or worker_active(store.root,eid):continue
-                group=None
-                if row['origin'] and row['origin'].startswith('{'):
-                    origin=json.loads(row['origin']);group=origin.get('batch')
-                    if groups.get(group,0)>=origin['worker_limit']:continue
-                env=os.environ.copy()
-                for key in ('OMP_NUM_THREADS','OPENBLAS_NUM_THREADS','MKL_NUM_THREADS','NUMBA_NUM_THREADS'):env[key]='1'
-                with (store.root/f'{eid}.log').open('ab') as log:
-                    children[eid]=subprocess.Popen([sys.executable,'-m','evolution_engine','--data',str(store.root),'worker',eid],stdout=log,stderr=log,env=env)
-                slots-=1
-                if group:groups[group]=groups.get(group,0)+1
-            if until_idle and not children and not active and not store.query("SELECT 1 FROM experiments WHERE status='queued' LIMIT 1"):return
+            settings=store.settings()
+            try:
+                with gate(store.root):
+                    for eid,proc in list(children.items()):
+                        code=proc.poll()
+                        if code is not None:
+                            del children[eid]
+                            if code!=0:handle_failure(store,eid,f'worker exited with code {code}')
+                    # Lock-based liveness also discovers children of a previous scheduler.
+                    active=[]
+                    for r in store.query("SELECT id,status FROM experiments WHERE status IN ('running','pausing','cancelling')"):
+                        if worker_active(store.root,r['id']):active.append(r['id'])
+                        elif r['id'] not in children:handle_failure(store,r['id'],'worker disappeared before a safe boundary')
+                    settings=store.settings();count=len(set(active)|set(children))
+                    disk=disk_guard(store)
+                    slots=0 if disk['block_scheduling'] else max(0,settings['max_workers']-count)
+                    groups={}
+                    for eid in set(active)|set(children):
+                        rows=store.query('SELECT origin FROM experiments WHERE id=?',(eid,))
+                        if not rows:continue
+                        origin=rows[0]['origin']
+                        if origin and origin.startswith('{'):
+                            group=json.loads(origin).get('batch');groups[group]=groups.get(group,0)+1
+                    queued=store.query("SELECT id,origin FROM experiments WHERE status='queued' ORDER BY priority DESC,created")
+                    for row in queued:
+                        if slots<=0:break
+                        eid=row['id']
+                        if eid in children or worker_active(store.root,eid):continue
+                        group=None
+                        if row['origin'] and row['origin'].startswith('{'):
+                            origin=json.loads(row['origin']);group=origin.get('batch')
+                            if groups.get(group,0)>=origin['worker_limit']:continue
+                        env=os.environ.copy()
+                        for key in ('OMP_NUM_THREADS','OPENBLAS_NUM_THREADS','MKL_NUM_THREADS','NUMBA_NUM_THREADS'):env[key]='1'
+                        with (store.root/f'{eid}.log').open('ab') as log:
+                            children[eid]=subprocess.Popen([sys.executable,'-m','evolution_engine','--data',str(store.root),'worker',eid],stdout=log,stderr=log,env=env)
+                        slots-=1
+                        if group:groups[group]=groups.get(group,0)+1
+                    if until_idle and not children and not active and not store.query("SELECT 1 FROM experiments WHERE status='queued' LIMIT 1"):return
+            except MaintenanceBusy:
+                pass
             time.sleep(min(settings['poll_seconds'],1))
 
 def ensure_scheduler(root):

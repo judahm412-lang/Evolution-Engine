@@ -13,6 +13,9 @@ from .randomness import streams,states,restore
 from .environments import create_environment
 from .evolution import reproduce,statistics
 from .storage import Store
+from .coordination import gate
+from .compatibility import CHECKPOINT_FORMAT, SCIENTIFIC_ENGINE
+from .resources import disk_guard
 
 @contextmanager
 def exclusive(path):
@@ -22,12 +25,18 @@ def exclusive(path):
         yield
 
 def state_record(eid,generation,population,next_id,rngs,config,env):
-    return {'format':1,'engine_version':__version__,'environment_version':env.version,'experiment_id':eid,
+    return {'format':CHECKPOINT_FORMAT,'scientific_engine':SCIENTIFIC_ENGINE,'engine_version':__version__,'environment_version':env.version,'experiment_id':eid,
             'generation':generation,'population':[g.id for g in population],'next_id':next_id,
             'rng':states(rngs),'config':config.model_dump(),'environment_state':{},'pending':'evaluate_population'}
 
 def run_experiment(root,eid,stop_after=None,fault=None,scheduled=False):
     store=Store(root)
+    with gate(store.root):
+        # A queued child may have been removed before it acquired this gate.
+        if scheduled and not store.query("SELECT 1 FROM experiments WHERE id=?",(eid,)):return None
+        return _run_locked(store,eid,stop_after,fault,scheduled)
+
+def _run_locked(store,eid,stop_after,fault,scheduled):
     logger=logging.getLogger('evolution_engine')
     logger.setLevel(store.settings()['logging'])
     # Resolve from DB before constructing any filesystem name.
@@ -53,9 +62,15 @@ def run_experiment(root,eid,stop_after=None,fault=None,scheduled=False):
             else:
                 rngs=streams(config.seed);population=initialize(config,rngs['initialization']);generation=0;next_id=len(population)+1
                 store.initialize_checkpoint(eid,population,state_record(eid,0,population,next_id,rngs,config,env))
-            iterations=0
+            iterations=0;last_disk_check=-10.0;disk_pause=False
             while generation<config.generations:
                 status=store.experiment(eid)['status']
+                if time.monotonic()-last_disk_check>=1:
+                    disk_pause=disk_guard(store)['pause_workers'];last_disk_check=time.monotonic()
+                if disk_pause:
+                    status='paused'
+                    with store.transaction() as db:store.event(db,eid,'disk_pause','Low disk space: paused at a committed generation boundary; free space then resume.')
+                    break
                 if status in ('pausing','cancelling') or (stop_after is not None and iterations>=stop_after):
                     status='cancelled' if status=='cancelling' else 'paused';break
                 start=time.perf_counter();cpu=time.process_time()

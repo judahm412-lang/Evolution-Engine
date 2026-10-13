@@ -1,0 +1,69 @@
+{
+  "commit": "143d300",
+  "experiment": "a25c01fbe1f6",
+  "seconds": 0.6451440929995442,
+  "generations_per_second": 62.001652706798104,
+  "peak_rss_mib": 154.2890625,
+  "config": {
+    "name": "RPS compatibility",
+    "description": "",
+    "experiment_id": null,
+    "mode": "compatibility",
+    "generations": 40,
+    "replicates": 1,
+    "seed": 91,
+    "population": {
+      "size": 100,
+      "network": {
+        "layers": [
+          9,
+          12,
+          3
+        ],
+        "activations": [
+          "sigmoid",
+          "linear"
+        ],
+        "initialization": "uniform"
+      }
+    },
+    "evolution": {
+      "selection": "top",
+      "elite_count": 20,
+      "tournament_size": 3,
+      "reproduction": "asexual",
+      "mutation": "uniform",
+      "probability": 0.1,
+      "magnitude": 0.2,
+      "mutate_weights": true,
+      "mutate_biases": true
+    },
+    "environment": {
+      "type": "rps",
+      "matches": 30,
+      "rounds": 23,
+      "bot_rounds": 20,
+      "bot_weight": 0.25,
+      "self_weight": 1,
+      "opponents": [
+        1,
+        2,
+        3
+      ],
+      "target": 0.5
+    },
+    "execution": {
+      "workers": 2,
+      "checkpoint_frequency": 10,
+      "checkpoint_retention": 10,
+      "history_stride": 1,
+      "acceleration": "auto",
+      "retries": 1,
+      "priority": 0
+    },
+    "storage": {
+      "export_compression": true,
+      "archive_policy": "retain"
+    }
+  }
+}

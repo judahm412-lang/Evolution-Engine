@@ -11,7 +11,9 @@ from . import __version__
 from .config import Config
 from .neural import Genome
 
-SCHEMA_VERSION=2
+from .migrations import SCHEMA_VERSION, migrate_metadata
+from .coordination import gate
+from .compatibility import validate_checkpoint
 def encode(value): return json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False)
 
 def historical_connection(path):
@@ -36,6 +38,12 @@ class Store:
 
     @contextmanager
     def transaction(self):
+        with gate(self.root):
+            with self._transaction() as db:
+                yield db
+
+    @contextmanager
+    def _transaction(self):
         db=self.connect()
         try:
             db.execute('BEGIN IMMEDIATE')
@@ -50,7 +58,17 @@ class Store:
         try:return [dict(r) for r in db.execute(sql,args)]
         finally:db.close()
 
-    def migrate(self):
+    def migrate(self, fault=None):
+        # Current schemas need no write lock or migration transaction.
+        with self.connect() as probe:
+            version=probe.execute("PRAGMA user_version").fetchone()[0]
+        probe.close()
+        if version>SCHEMA_VERSION: raise ValueError("database schema is newer than this engine")
+        if version==SCHEMA_VERSION:return
+        with gate(self.root):
+            self._migrate(fault)
+
+    def _migrate(self, fault=None):
         db=self.connect()
         try:
             db.execute('PRAGMA journal_mode=WAL')
@@ -76,6 +94,7 @@ class Store:
             if version<2:
                 db.execute('CREATE TABLE IF NOT EXISTS analyses(id INTEGER PRIMARY KEY,created REAL NOT NULL,kind TEXT NOT NULL,result TEXT NOT NULL)')
                 db.execute('PRAGMA user_version=2')
+            if version<3:migrate_metadata(db, fault)
             db.commit()
         except BaseException:db.rollback();raise
         finally:db.close()
@@ -170,7 +189,7 @@ class Store:
         r=rows[0]
         if sha256(r['state'].encode()).hexdigest()!=r['checksum']:raise ValueError('corrupt checkpoint checksum')
         state=json.loads(r['state'])
-        if state['engine_version']!=__version__ or state['format']!=1:raise ValueError('incompatible checkpoint version')
+        validate_checkpoint(state)
         if state['experiment_id']!=eid or state['generation']!=r['generation']:raise ValueError('checkpoint identity mismatch')
         if len(set(state['population']))!=len(state['population']):raise ValueError('duplicate checkpoint identities')
         return state
@@ -200,7 +219,7 @@ class Store:
         return [{'generation':r['generation'],**json.loads(r['statistics'])} for r in self.query('SELECT * FROM generations WHERE experiment_id=? AND generation>=? ORDER BY generation LIMIT ?',(eid,start,limit))]
 
     def settings(self):
-        default={'max_workers':2,'poll_seconds':1.0,'logging':'INFO','default_config':Config().model_dump(),'dashboard_refresh':1}
+        default={'max_workers':2,'poll_seconds':1.0,'logging':'INFO','default_config':Config().model_dump(),'dashboard_refresh':1,'disk_policy':{'enabled':True,'unit':'gib','warning':5.0,'critical':2.0,'pause':1.0}}
         default.update({r['key']:json.loads(r['value']) for r in self.query('SELECT * FROM settings')});return default
 
     def save_settings(self,settings):

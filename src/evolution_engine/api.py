@@ -15,6 +15,7 @@ from .storage import Store,encode
 from . import __version__
 from .research import inspect,lineage,tournament,save_tournament,export_result,population_analysis,run_metrics
 from .manager import enqueue
+from .resources import DiskPolicy
 
 class Action(Model):
     action: Literal['start','pause','resume','cancel','stop']
@@ -41,6 +42,7 @@ class Settings(Model):
     logging: Literal['DEBUG','INFO','WARNING']='INFO'
     default_config: Config=Field(default_factory=Config)
     dashboard_refresh: int=Field(1,ge=1,le=30)
+    disk_policy: DiskPolicy=Field(default_factory=DiskPolicy)
 
 class Sweep(Model):
     config: Config
@@ -195,7 +197,7 @@ def create_app(root):
     def settings():return {**store.settings(),'storage_root':str(store.root)}
 
     @app.put('/api/settings')
-    def update_settings(body:Settings):store.save_settings(body.model_dump());return store.settings()
+    def update_settings(body:Settings):store.save_settings(body.model_dump(exclude_unset=True));return store.settings()
 
     @app.get('/api/events')
     async def live(request:Request):
