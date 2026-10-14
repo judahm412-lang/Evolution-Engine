@@ -123,7 +123,9 @@ def delete_experiments(store,ids,confirm,acknowledge_no_backup=False,remove_anal
             for row in db.execute('SELECT id,result FROM analyses').fetchall():
                 result=json.loads(row['result']);refs=result.get('entrants',[])
                 if any(ref.get('experiment_id') in ids for ref in refs):
-                    if remove_analyses:db.execute('DELETE FROM analyses WHERE id=?',(row['id'],))
+                    if remove_analyses:
+                        db.execute("DELETE FROM bookmarks WHERE kind='tournament' AND json_extract(reference,'$.analysis_id')=?",(row['id'],))
+                        db.execute('DELETE FROM analyses WHERE id=?',(row['id'],))
                     else:
                         for ref in refs:
                             if ref.get('experiment_id') in ids:ref['source_deleted']=True

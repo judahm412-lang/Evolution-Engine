@@ -1,0 +1,52 @@
+{
+  "comparison": "Actual v2.0.0 wheel uninterrupted vs actual v2.0.0 pause at 364 upgraded with notes/tags vs v2.0.1 development uninterrupted",
+  "generations": 1000,
+  "seed_text": "20261011",
+  "matches": true,
+  "hash_encoding": "length-prefixed JSON scalars / raw BLOB bytes",
+  "boundaries": [
+    "all genome identities, parameter bytes, mutation metadata, fingerprints",
+    "all retained per-network fitness/counts for every generation",
+    "final three PCG64 states"
+  ],
+  "excluded": [
+    "elapsed timing and memory statistics",
+    "timestamps and experiment IDs",
+    "application metadata"
+  ],
+  "hashes": {
+    "stable-uninterrupted": {
+      "genomes": "d0808973e5d40c3cf584a80ab913ebc2005e9f300c47733de867a208d8cdf8bf",
+      "fitness": "0a15acdad5ac5702c3b50f898fb576dddea1e4f1f070c2acdc5e953f4cf3821b"
+    },
+    "stable-paused": {
+      "genomes": "d0808973e5d40c3cf584a80ab913ebc2005e9f300c47733de867a208d8cdf8bf",
+      "fitness": "0a15acdad5ac5702c3b50f898fb576dddea1e4f1f070c2acdc5e953f4cf3821b"
+    },
+    "patch-uninterrupted": {
+      "genomes": "d0808973e5d40c3cf584a80ab913ebc2005e9f300c47733de867a208d8cdf8bf",
+      "fitness": "0a15acdad5ac5702c3b50f898fb576dddea1e4f1f070c2acdc5e953f4cf3821b"
+    }
+  },
+  "timings": {
+    "stable-uninterrupted": {
+      "experiment": "c6e84e0d8a93",
+      "seconds": 23.61363196299999,
+      "version": "2.0.0"
+    },
+    "stable-paused": {
+      "experiment": "3e2fe02636d0",
+      "seconds": 16.070138446999863,
+      "version": "2.0.0"
+    },
+    "upgraded-resume": {
+      "seconds": 24.24914154499993,
+      "starting_generation": 364
+    },
+    "patch-uninterrupted": {
+      "seconds": 22.50873292899996,
+      "experiment": "3af01b3506f7"
+    }
+  },
+  "peak_rss_mib": 158.22265625
+}

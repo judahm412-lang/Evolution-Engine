@@ -13,6 +13,9 @@ def main():
     sub=parser.add_subparsers(dest='command',required=True)
     run=sub.add_parser('run');run.add_argument('config');run.add_argument('--enqueue',action='store_true');run.add_argument('--sweep',type=float,nargs='+')
     sub.add_parser('list')
+    sub.add_parser('backup')
+    p=sub.add_parser('verify-backup');p.add_argument('archive')
+    p=sub.add_parser('restore');p.add_argument('archive');p.add_argument('--destination',required=True)
     for name in ('start','pause','resume','cancel','stop'):
         p=sub.add_parser(name);p.add_argument('id');p.add_argument('--generations',type=int)
     p=sub.add_parser('worker');p.add_argument('id')
@@ -25,9 +28,17 @@ def main():
     p=sub.add_parser('import-archive');p.add_argument('path');p.add_argument('--name',required=True);p.add_argument('--population-size',type=int,default=100);p.add_argument('--prefix');p.add_argument('--start-generation',type=int,default=0)
     p=sub.add_parser('benchmark');p.add_argument('--generations',type=int,default=40);p.add_argument('--workers',type=int,nargs='+',default=[1,2,4]);p.add_argument('--output')
     p=sub.add_parser('check');p.add_argument('id',nargs='?')
-    args=parser.parse_args();store=Store(args.data);result=None
+    args=parser.parse_args()
+    if args.command in ('verify-backup','restore'):
+        from .backups import verify_backup,restore_backup
+        result=verify_backup(args.archive) if args.command=='verify-backup' else restore_backup(args.archive,args.destination)
+        print(json.dumps(result,indent=2,allow_nan=False));return
+    store=Store(args.data);result=None
     logging.basicConfig(level=store.settings()['logging'],format='%(asctime)s %(levelname)s %(message)s')
-    if args.command=='run':
+    if args.command=='backup':
+        from .backups import create_backup
+        result=create_backup(store)
+    elif args.command=='run':
         from .manager import enqueue,ensure_scheduler
         from .runner import run_experiment
         c=load_config(args.config)

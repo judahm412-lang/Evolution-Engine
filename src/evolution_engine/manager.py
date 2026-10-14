@@ -82,7 +82,7 @@ def scheduler(root,until_idle=False):
                         group=None
                         if row['origin'] and row['origin'].startswith('{'):
                             origin=json.loads(row['origin']);group=origin.get('batch')
-                            if groups.get(group,0)>=origin['worker_limit']:continue
+                            if group and groups.get(group,0)>=origin.get('worker_limit',settings['max_workers']):continue
                         env=os.environ.copy()
                         for key in ('OMP_NUM_THREADS','OPENBLAS_NUM_THREADS','MKL_NUM_THREADS','NUMBA_NUM_THREADS'):env[key]='1'
                         with (store.root/f'{eid}.log').open('ab') as log:

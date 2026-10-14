@@ -8,3 +8,6 @@ runtime/
 *.sqlite*
 *.log
 node_modules/
+
+.superdesign/
+tests/fixtures/v2_0_0/workspace/

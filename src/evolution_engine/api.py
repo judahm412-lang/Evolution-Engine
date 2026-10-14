@@ -69,8 +69,14 @@ def create_app(root):
                 return JSONResponse({'detail':'X-Evolution-Client: dashboard required'},status_code=403)
             try:size=int(request.headers.get('content-length','0'))
             except ValueError:return JSONResponse({'detail':'invalid content length'},status_code=400)
-            if size>200000:
+            if size<0 or size>200000:
                 return JSONResponse({'detail':'request too large'},status_code=413)
+            chunks=[];actual=0
+            async for chunk in request.stream():
+                actual+=len(chunk)
+                if actual>200000:return JSONResponse({'detail':'request too large'},status_code=413)
+                chunks.append(chunk)
+            request._body=b''.join(chunks)
         response=await call_next(request)
         response.headers['X-Content-Type-Options']='nosniff'
         response.headers['Content-Security-Policy']="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'"
@@ -210,5 +216,7 @@ def create_app(root):
                 await asyncio.sleep(store.settings()['dashboard_refresh'])
         return StreamingResponse(stream(),media_type='text/event-stream',headers={'Cache-Control':'no-cache'})
 
+    from .lab_api import install
+    install(app,store)
     app.mount('/assets',StaticFiles(directory=web),name='assets')
     return app
