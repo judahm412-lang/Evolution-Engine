@@ -66,3 +66,13 @@ analysis = population_analysis(store, experiment_id, 39)
 ```
 
 `run_experiment(..., stop_after=N)` pauses after N additional committed generations for scripted recovery tests. `Genome.forward(observations, compatibility=False)` accepts one observation or a batch. `Genome.record()` serializes inherited data; `Genome(**record)` validates/restores it. Environment plugins return `Evaluation` arrays and expose reset/observe/step; register new factories in `environments.ENVIRONMENTS` and add their validated configuration type in `config.Environment`. See the implementations for exact type contracts.
+
+## Research metadata and retention in v2.0.1
+
+Journals, tags, research projects, bookmarks and derived milestone reviews live in separate tables. They are searchable and exportable but cannot change the experiment's scientific configuration. Repeat creates an independent config/identity with same or backend-generated fresh seed and source provenance. Use same seeds for reproducibility checks and multiple fresh seeds for replications; a single repeat is not statistical evidence.
+
+Detailed/Balanced/Compact retention presets affect only new experiments' history stride, archival-checkpoint frequency and retention (1/10/100, 10/50/20, 100/100/5 respectively). Every generation still commits its current recovery checkpoint and aggregate statistics; all distinct genomes and ancestry remain. Compact reduces detailed history, not scientific computation. Replay and reports disclose absent snapshots. Presets do not prune existing experiments.
+
+Config comparisons identify changes in scientific parameters separately from names, retention and execution controls. Reports contain provenance and limitations; user conclusions remain distinguishable from measured fitness and descriptive candidate milestones. Missing external historical files make gene-dependent inspection/tournaments unavailable; stored aggregates and annotations remain readable. Restore verifies and reports external file problems rather than inventing missing genomes.
+
+Before workspace migration read [UPGRADING_V2_0_1.md](UPGRADING_V2_0_1.md). Use Backups for full recovery and exports for selected research artifacts. Notes/tags/backup may be used during a run, while delete/VACUUM require all workers paused. Never run older and newer application workers on a shared workspace during an upgrade.

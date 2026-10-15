@@ -1,5 +1,6 @@
 """Run the actual stable wheel then upgrade and compare 1,000 generations."""
 from pathlib import Path
+import argparse
 import hashlib
 import json
 import os
@@ -21,7 +22,11 @@ def digest(root,table,columns,order):
     db.close();return h.hexdigest()
 
 def main():
-    destination=ROOT/'runtime/v201-science';destination.mkdir(exist_ok=True)
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--destination',type=Path,default=ROOT/'runtime/v201-science')
+    parser.add_argument('--output',type=Path,default=ROOT/'v2_0_1_scientific_validation.json')
+    args=parser.parse_args()
+    destination=args.destination;destination.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='stable-engine-') as td:
         package=Path(td)
         with zipfile.ZipFile(ROOT/'dist/evolution_engine-2.0.0-py3-none-any.whl') as source:source.extractall(package)
@@ -60,5 +65,5 @@ print(json.dumps({'experiment':eid,'seconds':time.perf_counter()-start,'version'
             db=sqlite3.connect(destination/name/'engine.sqlite');rng.append(json.loads(db.execute('SELECT state FROM checkpoints ORDER BY generation DESC LIMIT 1').fetchone()[0])['rng']);db.close()
         assert rng[0]==rng[1]==rng[2]
         result={'comparison':'Actual v2.0.0 wheel uninterrupted vs actual v2.0.0 pause at 364 upgraded with notes/tags vs v2.0.1 development uninterrupted','generations':1000,'seed_text':'20261011','matches':True,'hash_encoding':'length-prefixed JSON scalars / raw BLOB bytes','boundaries':['all genome identities, parameter bytes, mutation metadata, fingerprints','all retained per-network fitness/counts for every generation','final three PCG64 states'],'excluded':['elapsed timing and memory statistics','timestamps and experiment IDs','application metadata'],'hashes':hashes,'timings':results,'peak_rss_mib':resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024}
-        (ROOT/'v2_0_1_scientific_validation.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result,indent=2))
+        args.output.write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result,indent=2))
 if __name__=='__main__':main()

@@ -369,6 +369,10 @@ export async function bindBookmarks() {
           const href =
             b.kind === "tournament"
               ? `#tournament/${r.analysis_id}`
+              : b.kind === "branch"
+                ? `#family/${b.experiment_id}/${r.network_id}`
+                : b.kind === "experiment"
+                  ? `#experiment/${b.experiment_id}/monitor`
               : r.network_id
                 ? `#experiment/${b.experiment_id}/inspector/${r.network_id}`
                 : r.generation != null

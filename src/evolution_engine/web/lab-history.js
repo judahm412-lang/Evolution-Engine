@@ -100,7 +100,7 @@ function svgChart(data, smoothing) {
     hi += 1;
   }
   const [start, end] = data.range,
-    x = (g) => 60 + ((g - start) / Math.max(1, end - start)) * 880,
+    x = (g) => 100 + ((g - start) / Math.max(1, end - start)) * 840,
     y = (v) => 300 - ((v - lo) / (hi - lo)) * 260;
   const poly = metrics
     .map(
@@ -117,16 +117,17 @@ function svgChart(data, smoothing) {
       { length: 5 },
       (_, i) => {
         const v = lo + ((hi - lo) * i) / 4;
-        return `<line x1="60" x2="940" y1="${y(v)}" y2="${y(v)}" stroke="#e2e8dd"/><text x="50" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="#607276">${fmt(v, 2)}</text>`;
+        return `<line x1="100" x2="940" y1="${y(v)}" y2="${y(v)}" stroke="#e2e8dd"/><text x="90" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="#607276">${fmt(v, 2)}</text>`;
       },
     ).join(
       "",
-    )}${poly}${[...data.milestones.map((m) => ({ g: m.generation, label: m.kind, type: "milestone" })), ...data.bookmarks.map((b) => ({ g: b.reference.generation, label: b.name, type: "bookmark" }))].map((m) => `<a href="#replay/${data.experiment_id}/${m.g}"><circle cx="${x(m.g)}" cy="315" r="4" fill="${m.type === "milestone" ? "#a18737" : "#805ead"}"><title>${esc(m.type + " · " + m.label + " · generation " + m.g)}</title></circle></a>`).join("")}<line class="chart-crosshair" x1="60" x2="60" y1="30" y2="310" stroke="#607276" stroke-dasharray="3 3"/><text x="60" y="341" font-size="12" fill="#607276">Generation ${start}</text><text x="940" y="341" text-anchor="end" font-size="12" fill="#607276">${end}</text></svg><div class="legend">${metrics.map((k, i) => `<span><svg width="16" height="10" aria-hidden="true"><rect width="14" height="3" y="3" fill="${colors[i]}"/></svg>${names[k]}</span>`).join("")}<span>Ochre markers: milestones · Purple markers: bookmarks</span></div>`,
+    )}${poly}${[...data.milestones.map((m) => ({ g: m.generation, label: m.kind, type: "milestone" })), ...data.bookmarks.map((b) => ({ g: b.reference.generation, label: b.name, type: "bookmark" }))].map((m) => `<a href="#replay/${data.experiment_id}/${m.g}"><circle cx="${x(m.g)}" cy="315" r="4" fill="${m.type === "milestone" ? "#a18737" : "#805ead"}"><title>${esc(m.type + " · " + m.label + " · generation " + m.g)}</title></circle></a>`).join("")}<line class="chart-crosshair" x1="100" x2="100" y1="30" y2="310" stroke="#607276" stroke-dasharray="3 3"/><text x="100" y="341" font-size="12" fill="#607276">Generation ${start}</text><text x="940" y="341" text-anchor="end" font-size="12" fill="#607276">${end}</text></svg><div class="legend">${metrics.map((k, i) => `<span><svg width="16" height="10" aria-hidden="true"><rect width="14" height="3" y="3" fill="${colors[i]}"/></svg>${names[k]}</span>`).join("")}<span>Ochre markers: milestones · Purple markers: bookmarks</span></div>`,
   };
 }
 export async function bindCharts() {
   const form = $("#chart-form");
   const load = async () => {
+    const loadStarted = performance.now();
     const d = new FormData(form),
       ids = d.getAll("ids"),
       metrics = d.getAll("metrics");
@@ -146,6 +147,7 @@ export async function bindCharts() {
         return api(`/lab/experiments/${eid}/chart?${q}`);
       }),
     );
+    const renderStarted = performance.now();
     $("#lab-charts").innerHTML = results
       .map((data, index) => {
         const name = [...form.elements.ids.options].find(
@@ -168,7 +170,7 @@ export async function bindCharts() {
             point = ((event.clientX - r.left) / r.width) * 980,
             g =
               data.range[0] +
-              Math.max(0, Math.min(1, (point - 60) / 880)) *
+              Math.max(0, Math.min(1, (point - 100) / 840)) *
                 (data.range[1] - data.range[0]);
           hovered = data.rows.reduce(
             (best, row) =>
@@ -180,10 +182,10 @@ export async function bindCharts() {
           );
           if (!hovered) return;
           const x =
-            60 +
+            100 +
             ((hovered.generation - data.range[0]) /
               Math.max(1, data.range[1] - data.range[0])) *
-              880;
+              840;
           $(".chart-crosshair", svg).setAttribute("x1", x);
           $(".chart-crosshair", svg).setAttribute("x2", x);
           $(".chart-tooltip", root).textContent =
@@ -216,6 +218,11 @@ export async function bindCharts() {
           }).catch((e) => toast(e.message, true));
       };
     });
+    // Local diagnostics measure script, DOM construction and layout, not GPU paint.
+    const charts = $("#lab-charts");
+    charts.getBoundingClientRect();
+    charts.dataset.renderMs = (performance.now() - renderStarted).toFixed(2);
+    charts.dataset.loadMs = (performance.now() - loadStarted).toFixed(2);
   };
   bind(form, load);
   document.querySelectorAll("[data-chart-range]").forEach(

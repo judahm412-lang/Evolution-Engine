@@ -1,4 +1,4 @@
-# Evolution Engine v2.0
+# Evolution Engine v2.0.1
 
 A local Python laboratory for reproducible neural-network evolution, saved-genome research, and concurrent experiments. Engine v1 and Experiment 8 remain separate, preserved research inputs.
 
@@ -57,8 +57,8 @@ Experiment 8 imports reference a closed, immutable SQLite file. Keep that source
 ## Verification and benchmarks
 
 ```sh
-PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q
-PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m unittest discover -s ../experiment_08/tests -q
+env PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q
+env PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m unittest discover -s ../experiment_08/tests -q
 .venv/bin/python -m evolution_engine --data runtime/benchmarks-new benchmark --generations 40 --workers 1 2 4 --output benchmark-new.json
 .venv/bin/python scripts/validate_release.py --data runtime/endurance-new --output acceptance-new.json
 .venv/bin/python -m pip wheel --no-deps . --wheel-dir dist
@@ -66,4 +66,18 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m unittest discover -s ../experiment
 
 The original SB3 and Experiment 8 are needed only for differential tests/imports, not to run the installed engine. Integration tests use local processes and loopback networking. A restrictive sandbox may block those tests.
 
-Read [ENGINE_V2_RELEASE_REPORT.md](ENGINE_V2_RELEASE_REPORT.md) for evidence and limitations, [COMPATIBILITY.md](COMPATIBILITY.md) for the precise equivalence claim, [DASHBOARD_GUIDE.md](DASHBOARD_GUIDE.md) for the UI, and [ARCHITECTURE.md](ARCHITECTURE.md), [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md), [BENCHMARKS.md](BENCHMARKS.md) for technical details.
+Read [ENGINE_V2_0_1_RELEASE_REPORT.md](ENGINE_V2_0_1_RELEASE_REPORT.md) for the patch release, and [ENGINE_V2_RELEASE_REPORT.md](ENGINE_V2_RELEASE_REPORT.md) for evidence and limitations, [COMPATIBILITY.md](COMPATIBILITY.md) for the precise equivalence claim, [DASHBOARD_GUIDE.md](DASHBOARD_GUIDE.md) for the UI, and [ARCHITECTURE.md](ARCHITECTURE.md), [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md), [BENCHMARKS.md](BENCHMARKS.md) for technical details.
+
+## Research laboratory tools in v2.0.1
+
+Storage Manager distinguishes physical SQLite/WAL files from cached per-experiment logical estimates. Backups create verified online snapshots; restore always uses a new directory. Deletion previews identities, dependencies and backup status, and requires exclusive maintenance. Family Trees, genetic comparisons, journals, tags, exact-seed repeats, persistent tournament baskets, configuration comparisons, replay, bookmarks, milestones, timelines and offline reports work entirely locally.
+
+See [UPGRADING_V2_0_1.md](UPGRADING_V2_0_1.md) **before opening an existing workspace**. Schema 2 upgrades transactionally to schema 3; original configurations, genomes and scientific checkpoints are preserved. The older application cannot open schema 3, so preserve a pre-upgrade backup. Never run old and new workers on the same workspace.
+
+```sh
+.venv/bin/python -m evolution_engine --data runtime/my-lab backup
+.venv/bin/python -m evolution_engine verify-backup /absolute/path/BACKUP.zip
+.venv/bin/python -m evolution_engine restore /absolute/path/BACKUP.zip --destination /absolute/path/new-lab
+```
+
+All workers must be paused before deletion or Reclaim Storage. Ordinary backup, notes, tags, browsing and resource monitoring may run while experiments are active. Background operation failures are visible and never reported as successful completion.

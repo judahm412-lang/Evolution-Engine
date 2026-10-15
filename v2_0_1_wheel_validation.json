@@ -1,0 +1,22 @@
+{
+  "version": "2.0.1",
+  "import_path": "/tmp/evolution-v201-axis-wheel-check/evolution_engine/__init__.py",
+  "cwd": "/tmp",
+  "all_static_assets": true,
+  "exact_seed": "9223372036854775807",
+  "restored_generations": 3,
+  "backup_verified": true,
+  "rng_equal_after_restore": true,
+  "final_wheel_sha256": "c7bb5951347072015c02ce1875d49f3b7a389f352c9e0a41629d8e302f9edf91",
+  "final_wheel_additional_validation": {
+    "outside_checkout_target_example_generations": 40,
+    "outside_checkout_target_example_status": "completed",
+    "archive_verified": true,
+    "archive_checkpoints_validated": 5,
+    "new_directory_restore": true,
+    "restored_schema": 3,
+    "restored_integrity": "ok",
+    "restored_foreign_key_violations": 0,
+    "bundled_updated_chart_asset": true
+  }
+}

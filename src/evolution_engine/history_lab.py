@@ -60,7 +60,7 @@ def timeline(store,eid,offset=0,limit=50,kind=''):
     # invented event here. Bookmark and milestone timestamps are annotation dates.
     sql="""WITH timeline AS (
       SELECT 'event:'||id AS key,time,kind,message AS description,NULL AS generation,NULL AS network_id,'recorded event' AS provenance FROM events WHERE experiment_id=?
-      UNION ALL SELECT 'checkpoint:'||generation,created,'checkpoint','Retained checkpoint',generation,NULL,'recorded checkpoint' FROM checkpoints WHERE experiment_id=?
+      UNION ALL SELECT 'checkpoint:'||generation,created,'checkpoint','Retained checkpoint: next generation '||generation,CASE WHEN generation>0 THEN generation-1 ELSE NULL END,NULL,'recorded checkpoint' FROM checkpoints WHERE experiment_id=?
       UNION ALL SELECT 'bookmark:'||id,created,'bookmark',name,CAST(json_extract(reference,'$.generation') AS INTEGER),CAST(json_extract(reference,'$.network_id') AS INTEGER),'user annotation' FROM bookmarks WHERE experiment_id=?
       UNION ALL SELECT 'milestone:'||id,created,'milestone',kind||' ('||status||')',generation,NULL,'derived descriptive observation' FROM milestones WHERE experiment_id=?
     ) SELECT * FROM timeline WHERE (?='' OR kind=?) ORDER BY time,key LIMIT ? OFFSET ?"""

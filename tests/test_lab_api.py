@@ -161,3 +161,12 @@ def test_streamed_request_size_and_revalidated_assets(lab):
     assert response.status_code == 413
     for path in ('/', '/assets/lab.js'):
         assert c.get(path).headers['cache-control'] == 'no-cache'
+
+
+def test_checkpoint_timeline_links_last_evaluated_observation(lab):
+    c, _, eid = lab
+    items = c.get(f'/api/lab/experiments/{eid}/timeline?kind=checkpoint').json()['items']
+    last = next(item for item in items if item['key']=='checkpoint:8')
+    assert last['generation'] == 7
+    assert 'next generation 8' in last['description']
+    assert c.get(f'/api/lab/experiments/{eid}/replay/7').status_code == 200

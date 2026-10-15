@@ -1,5 +1,13 @@
 # Delivery roadmap
 
+## v2.0.1 research laboratory
+
+The patch release is implemented and validated. It adds transactional metadata migration, safe maintenance and recovery, offline research organization and visualization, reports, and browser workflows. See `ENGINE_V2_0_1_RELEASE_REPORT.md` for evidence and `UPGRADING_V2_0_1.md` for migration. Scientific evolution behavior remains on the v2.0 line.
+
+Priorities for v2.1: two-parent inheritance and crossover with explicit provenance; matched asexual controls across independent seeds; held-out evaluation and multiple-testing discipline; optional live TurboWarp differentials; and measured scaling of very large lineage/history views. These are proposed research and engineering directions, not v2.0.1 results.
+
+## v2.0.0 baseline
+
 | Phase | Status | Evidence |
 |---|---|---|
 | 0 — Extract and validate existing components | Complete | Source audit, frozen Experiment 8 tests, controlled inference/match differentials, original-file SHA-256 manifest |
