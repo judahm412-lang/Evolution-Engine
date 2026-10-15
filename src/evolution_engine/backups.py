@@ -77,7 +77,9 @@ def create_backup(store,progress=lambda p:None,fault=None):
     bid=uuid.uuid4().hex;filename=f'{bid}.zip';final=directory/filename
     with gate(store.root),tempfile.TemporaryDirectory(prefix='.backup-',dir=directory) as temporary:
         temporary=Path(temporary);snapshot=temporary/'engine.sqlite'
-        estimated=store.path.stat().st_size
+        # page_count includes committed pages still in WAL; the main file alone
+        # can be much smaller while a long-lived reader/writer keeps WAL active.
+        estimated=store.query('PRAGMA page_count')[0]['page_count']*store.query('PRAGMA page_size')[0]['page_size']
         if shutil.disk_usage(directory).free<estimated*2+16*1024**2:raise ValueError('Insufficient disk space for backup snapshot and archive')
         source=store.connect();target=sqlite3.connect(snapshot)
         try:

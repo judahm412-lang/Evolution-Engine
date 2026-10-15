@@ -145,3 +145,19 @@ def test_jobs_failure_recovery_and_security(lab):
     assert c.put(f'/api/lab/experiments/{eid}/notes',headers=H,json={'content':{'hypothesis':'x'*210000}}).status_code==413
     assert c.get('/api/lab/resources').status_code==200
     assert c.get('/api/lab/retention-presets').status_code==200
+
+
+def test_streamed_request_size_and_revalidated_assets(lab):
+    c, _, eid = lab
+    def chunks():
+        yield b'{"content":{"freeform":"'
+        for _ in range(21):
+            yield b'x'*10000
+        yield b'"}}'
+    # A misleading Content-Length cannot bypass the actual streamed byte limit.
+    response = c.put(f'/api/lab/experiments/{eid}/notes',
+                     headers={**H, 'Content-Length':'0', 'Content-Type':'application/json'},
+                     content=chunks())
+    assert response.status_code == 413
+    for path in ('/', '/assets/lab.js'):
+        assert c.get(path).headers['cache-control'] == 'no-cache'

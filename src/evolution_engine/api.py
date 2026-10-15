@@ -78,6 +78,10 @@ def create_app(root):
                 chunks.append(chunk)
             request._body=b''.join(chunks)
         response=await call_next(request)
+        # Revalidate local assets after upgrades; nested ES modules can otherwise
+        # retain a previous patch's cached behavior across ordinary reloads.
+        if request.url.path=='/' or request.url.path.startswith('/assets/'):
+            response.headers['Cache-Control']='no-cache'
         response.headers['X-Content-Type-Options']='nosniff'
         response.headers['Content-Security-Policy']="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'"
         return response
